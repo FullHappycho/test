@@ -761,7 +761,7 @@ class Player {
                 height: this.tileSize
             });
             this.playerObject = img;
-            canvas.add(this.playerObject);
+            this.canvas.add(this.playerObject);
         } else {
             this.updatePlayerPosition();
         }
@@ -775,12 +775,12 @@ class Player {
                 top: this.y * this.tileSize
             });
             this.playerObject.bringToFront(); // 플레이어를 항상 앞으로 가져오기
-            canvas.renderAll(); // 위치 업데이트 후 캔버스를 렌더링
+            this.canvas.renderAll(); // 위치 업데이트 후 캔버스를 렌더링
         }
     }
 
     // 플레이어 이동 함수
-    move(direction, mapTiles) {
+    async move(direction, mapTiles, inventorySlots) {
         // mapTiles가 정의되지 않았거나 빈 배열이면 아무 동작도 하지 않음
         if (!mapTiles || mapTiles.length === 0) {
             return;
@@ -805,13 +805,35 @@ class Player {
             if (newX >= 0 && newX < mapTiles[newY].length) {
                 const targetTile = mapTiles[newY][newX];
 
-                if (targetTile && targetTile.monster) { // 새로운 좌표에 몬스터가 있는지 확인
+                // 상자와 상호작용하여 유물 획득
+                if (targetTile && targetTile.objectType === 'RelicChest') {
+                    const chest = targetTile.object;
+                    await chest.openChest(inventorySlots); // 인벤토리에 무작위 유물 추가
+                    mapTiles[newY][newX].object = null; // 상자 제거
+                    return; // 상자와 상호작용 후 이동하지 않음
+                }
+                
+                // 몬스터와 상호작용
+                if (targetTile && targetTile.monster) {
                     engageCombat(this, targetTile.monster, targetTile);
-                } else if (targetTile && targetTile.bonfire) {
+                }
+
+                // 화톳불과 상호작용하여 체력 회복
+                else if (targetTile && targetTile.bonfire) {
                     healPlayerBonfire(0); // 화톳불로 체력 회복
-                    canvas.remove(targetTile.bonfire.bonfireObject); // Bonfire 제거
+                    this.canvas.remove(targetTile.bonfire.bonfireObject); // Bonfire 제거
                     delete targetTile.bonfire; // 타일의 화톳불 속성 제거
-                } else if (targetTile && targetTile.reachable) {
+                }
+
+                else if (targetTile && targetTile.relicChest) {
+                    addRelicToInventory(getRandomRelic());
+                    addDescriptionToA("유물을 획득했습니다!");
+                    canvas.remove(targetTile.relicChest.chestObject);
+                    delete targetTile.relicChest;
+                }
+
+                // 이동 가능한 경우에만 플레이어 위치 업데이트
+                else if (targetTile && targetTile.reachable) {
                     this.x = newX;
                     this.y = newY;
                     this.updatePlayerPosition();
@@ -822,7 +844,6 @@ class Player {
                         generateMap(region); // 새로운 맵 생성
                     }
                 }
-
             }
         }
     }
@@ -872,46 +893,6 @@ function displayPlayerStats() {
     updateCanvasOrder();
 }
 
-/*
-function updatePlayerStats() {
-    const statsTextContent = `HP: ${player.hp}/${player.maxhp}    ATK: ${player.atk}    DEF: ${player.def}    Coins: ${player.coin}`;
-
-    // 기존 스탯 텍스트 및 배경 제거
-    const existingBackground = canvas.getObjects().find(obj => obj.id === 'playerStatsBackground');
-    const existingText = canvas.getObjects().find(obj => obj.id === 'playerStatsText');
-
-    if (existingBackground) canvas.remove(existingBackground);
-    if (existingText) canvas.remove(existingText);
-
-    // 스탯 배경 생성
-    const playerStatsBackground = new fabric.Rect({
-        left: 0,
-        top: 447,
-        width: 600,
-        height: 25,
-        fill: 'black',
-        selectable: false,
-        hoverCursor: 'default',
-        id: 'playerStatsBackground'
-    });
-    canvas.add(playerStatsBackground);
-
-    // 스탯 텍스트 생성
-    const playerStatsText = new fabric.Text(statsTextContent, {
-        left: 20,
-        top: 447,
-        fontSize: 24,
-        fill: 'lightgray',
-        selectable: false,
-        hoverCursor: 'default',
-        id: 'playerStatsText'
-    });
-    canvas.add(playerStatsText);
-
-    canvas.renderAll(); // 캔버스를 다시 렌더링하여 변경 사항 반영
-}
-*/
-
 function handlePlayerMove(event) {
     // 플레이어 움직임 처리 코드
     if (player) {  // player가 정의되어 있는지 확인
@@ -933,6 +914,85 @@ function handlePlayerMove(event) {
 }
 
 document.addEventListener('keydown', handlePlayerMove);
+
+const relics = [
+    { name: 'Cursed Sword', grade: 'Curse', description: '공격력 증가, 방어력 감소', effect: () => { player.atk += 3; player.def -= 1; }},
+    { name: 'Healing Herb', grade: 'Common', description: '체력을 5 회복합니다', effect: () => { player.hp = Math.min(player.hp + 5, player.maxhp); }},
+    { name: 'Magic Amulet', grade: 'Rare', description: '속도 증가', effect: () => { player.spd += 1; }},
+    { name: 'Legendary Armor', grade: 'Legendary', description: '방어력 크게 증가', effect: () => { player.def += 5; }}
+];
+
+function createInventory() {
+    const inventoryX = 480; // 층 표시 아래, 전환 버튼 위의 위치
+    const inventoryY = 100;
+    const slotSize = 64;
+    const inventory = [];
+
+    for (let row = 0; row < 5; row++) {
+        for (let col = 0; col < 2; col++) {
+            const slot = new fabric.Rect({
+                left: inventoryX + col * slotSize,
+                top: inventoryY + row * slotSize,
+                width: slotSize,
+                height: slotSize,
+                fill: 'lightgray',
+                stroke: 'black',
+                strokeWidth: 1,
+                selectable: false,
+                hoverCursor: 'default'
+            });
+            canvas.add(slot);
+            inventory.push(slot);
+        }
+    }
+}
+createInventory();
+
+class RelicChest {
+    constructor(x, y, tileSize, imageUrl) {
+        this.x = x;
+        this.y = y;
+        this.tileSize = tileSize;
+        this.imageUrl = imageUrl;
+        this.chestObject = null;
+    }
+
+    async initChest() {
+        const img = await loadImage(this.imageUrl, {
+            selectable: false,
+            hoverCursor: 'default',
+            left: this.x * this.tileSize,
+            top: this.y * this.tileSize,
+            width: this.tileSize,
+            height: this.tileSize
+        });
+        this.chestObject = img;
+        return img;
+    }
+}
+
+async function handlePlayerMoveToChest(player, chest, mapTiles) {
+    // 유물 획득 로직 구현
+    addRelicToInventory(getRandomRelic());
+    addDescriptionToA("유물을 획득했습니다!");
+    
+    // 상자 제거
+    canvas.remove(chest.chestObject);
+    delete mapTiles[chest.y][chest.x].relicChest;
+}
+
+function getRandomRelic() {
+    return relics[Math.floor(Math.random() * relics.length)];
+}
+
+function addRelicToInventory(relic) {
+    // 인벤토리에 유물 추가하는 로직 (인벤토리 UI와 연동)
+    addDescriptionToA(`유물 "${relic.name}" (${relic.grade})를 획득했습니다!`);
+    relic.effect();
+    displayPlayerStats();
+}
+
+
 
 //배치할 오브젝트 수를 설정
 const objectCounts = {
@@ -1038,6 +1098,10 @@ function getRandomTileImage(tileType, region) {
 
 // 게임 맵을 순서대로 생성하는 함수
 async function generateMap(region) {
+    if (floor > 5) {
+        monsterLevel = 'level2';
+    }
+
     const descriptionBackground = canvas.getObjects().find(obj => obj.id === 'descriptionBoxBackground');
     const descriptionText = canvas.getObjects().find(obj => obj.id === 'descriptionBoxText');
     const switchButtonBackground = canvas.getObjects().find(obj => obj.id === 'switchButtonBackground');
@@ -1132,7 +1196,6 @@ function generateMainMenu() {
     });
     
 }*/
-
 
 // 화면 전환 함수
 async function switchScreen() {
