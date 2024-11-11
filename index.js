@@ -743,7 +743,7 @@ class Player {
 
         this.maxhp = 20;
         this.hp = 20;
-        this.atk = 5;
+        this.atk = 1;
         this.def = 0;
         this.spd = 1;
         this.coin = 0;
@@ -826,8 +826,12 @@ class Player {
                 }
 
                 else if (targetTile && targetTile.relicChest) {
-                    addRelicToInventory(getRandomRelic());
-                    addDescriptionToA("유물을 획득했습니다!");
+                    const relic = getRandomRelic();
+                    if (relic) {
+                        promptRelicDecision(relic); // 유물 획득 여부 결정 함수 호출
+                    } else {
+                        addDescriptionToA("상자에는 아무것도 없습니다.");
+                    }
                     canvas.remove(targetTile.relicChest.chestObject);
                     delete targetTile.relicChest;
                 }
@@ -851,6 +855,13 @@ class Player {
 
 let player = new Player(0, 0, canvas, tileSize, playerImageUrl); // 플레이어 객체를 전역으로 선언
 
+function disablePlayerMovement() {
+    document.removeEventListener('keydown', handlePlayerMove);
+}
+
+function enablePlayerMovement() {
+    document.addEventListener('keydown', handlePlayerMove);
+}
 
 // 플레이어 속성 정보를 화면 왼쪽 아래에 표시하는 함수
 function displayPlayerStats() {
@@ -916,17 +927,19 @@ function handlePlayerMove(event) {
 document.addEventListener('keydown', handlePlayerMove);
 
 const relics = [
-    { name: 'Cursed Sword', grade: 'Curse', description: '공격력 증가, 방어력 감소', effect: () => { player.atk += 3; player.def -= 1; }},
-    { name: 'Healing Herb', grade: 'Common', description: '체력을 5 회복합니다', effect: () => { player.hp = Math.min(player.hp + 5, player.maxhp); }},
-    { name: 'Magic Amulet', grade: 'Rare', description: '속도 증가', effect: () => { player.spd += 1; }},
-    { name: 'Legendary Armor', grade: 'Legendary', description: '방어력 크게 증가', effect: () => { player.def += 5; }}
+    { name: 'Cursed Sword', grade: '저주', description: '보유시, 공격력 1 증가', effect: () => { player.atk += 1;}, imageUrl: './images/CursedSword.png' },
+    { name: '도끼', grade: '일반', description: '도끼 - 일반\n보유시, 공격력 2 증가', effect: () => { player.atk += 2;}, imageUrl: './images/CursedSword.png' },
+    { name: 'Healing Herb', grade: '일반', description: '체력을 5 회복합니다', effect: () => { player.hp = Math.min(player.hp + 5, player.maxhp); }, imageUrl: './images/HealingHerb.png' },
+    { name: 'Magic Amulet', grade: '희귀', description: '속도 증가', effect: () => { player.spd += 1; }, imageUrl: './images/MagicAmulet.png' },
+    { name: 'Legendary Armor', grade: 'Legendary', description: '방어력 크게 증가', effect: () => { player.def += 5; }, imageUrl: './images/LegendaryArmor.png' }
 ];
 
+const inventorySlots = []; // 전역 선언
+
 function createInventory() {
-    const inventoryX = 480; // 층 표시 아래, 전환 버튼 위의 위치
+    const inventoryX = 460;
     const inventoryY = 100;
     const slotSize = 64;
-    const inventory = [];
 
     for (let row = 0; row < 5; row++) {
         for (let col = 0; col < 2; col++) {
@@ -937,12 +950,13 @@ function createInventory() {
                 height: slotSize,
                 fill: 'lightgray',
                 stroke: 'black',
-                strokeWidth: 1,
+                strokeWidth: 4,
                 selectable: false,
-                hoverCursor: 'default'
+                hoverCursor: 'default',
+                id: `inventorySlot_${row}_${col}` // 고유 ID 설정
             });
             canvas.add(slot);
-            inventory.push(slot);
+            inventorySlots.push(slot);
         }
     }
 }
@@ -971,25 +985,120 @@ class RelicChest {
     }
 }
 
-async function handlePlayerMoveToChest(player, chest, mapTiles) {
-    // 유물 획득 로직 구현
-    addRelicToInventory(getRandomRelic());
-    addDescriptionToA("유물을 획득했습니다!");
-    
-    // 상자 제거
-    canvas.remove(chest.chestObject);
-    delete mapTiles[chest.y][chest.x].relicChest;
+function promptRelicDecision(relic) {
+    disablePlayerMovement();  // 플레이어 동작 비활성화
+
+    const overlay = new fabric.Rect({
+        left: 0,
+        top: 0,
+        width: gridSize * tileSize,
+        height: gridSize * tileSize,
+        fill: 'rgba(0, 0, 0, 0.7)',
+        selectable: false,
+        hoverCursor: 'default'  // 커서를 기본 상태로 유지
+    });
+    canvas.add(overlay);
+
+    let img;
+    fabric.Image.fromURL(relic.imageUrl, (loadedImg) => {
+        img = loadedImg;
+        img.set({
+            left: (gridSize * tileSize) / 2 - img.width / 2,
+            top: 150,
+            selectable: false,
+            hoverCursor: 'default'  // 커서가 변하지 않도록 설정
+        });
+        canvas.add(img);
+
+        img.on('mousedown', () => displayDescription(relic.description, relic.imageUrl));
+    });
+
+    const messageText = new fabric.Text("이 유물을 획득하시겠습니까?", {
+        left: (gridSize * tileSize) / 2 - 100,
+        top: 250,
+        fontSize: 20,
+        fill: 'white',
+        selectable: false,
+        hoverCursor: 'default'
+    });
+    canvas.add(messageText);
+
+    const yesButton = new fabric.Text("네", {
+        left: (gridSize * tileSize) / 2 - 50,
+        top: 300,
+        fontSize: 20,
+        fill: 'white',
+        selectable: false,
+        hoverCursor: 'pointer'
+    });
+    yesButton.on('mousedown', () => {
+        addRelicToInventory(relic);
+        removePromptOverlay([overlay, img, messageText, yesButton, noButton]);
+    });
+    canvas.add(yesButton);
+
+    const noButton = new fabric.Text("아니오", {
+        left: (gridSize * tileSize) / 2 + 20,
+        top: 300,
+        fontSize: 20,
+        fill: 'white',
+        selectable: false,
+        hoverCursor: 'pointer'
+    });
+    noButton.on('mousedown', () => {
+        removePromptOverlay([overlay, img, messageText, yesButton, noButton]);
+    });
+    canvas.add(noButton);
+}
+
+function removePromptOverlay(objects) {
+    objects.forEach((obj) => canvas.remove(obj));
+    enablePlayerMovement();  // 플레이어 동작 재활성화
+    canvas.renderAll();
 }
 
 function getRandomRelic() {
-    return relics[Math.floor(Math.random() * relics.length)];
+    const availableRelics = relics.filter(relic => 
+        !inventorySlots.some(slot => slot.relic && slot.relic.name === relic.name)
+    );
+
+    if (availableRelics.length === 0) {
+        addDescriptionToA("상자에는 아무것도 없습니다.");
+        return null;
+    }
+
+    return availableRelics[Math.floor(Math.random() * availableRelics.length)];
 }
 
 function addRelicToInventory(relic) {
-    // 인벤토리에 유물 추가하는 로직 (인벤토리 UI와 연동)
+    if (!relic) {
+        addDescriptionToA("상자에는 아무것도 없습니다.");
+        return;
+    }
+
     addDescriptionToA(`유물 "${relic.name}" (${relic.grade})를 획득했습니다!`);
     relic.effect();
     displayPlayerStats();
+
+    fabric.Image.fromURL(relic.imageUrl, (img) => {
+        const emptySlot = inventorySlots.find(slot => !slot.hasRelic);
+        if (emptySlot) {
+            img.set({
+                left: emptySlot.left + 2,
+                top: emptySlot.top + 2,
+                //scaleX: 0.9,
+                //scaleY: 0.9,
+                selectable: false,
+                hoverCursor: 'default'  // 커서가 변하지 않도록 설정
+            });
+            canvas.add(img);
+            emptySlot.hasRelic = true;
+            emptySlot.relic = relic;
+            emptySlot.relicImage = img;
+
+            img.on('mousedown', () => displayDescription(relic.description, relic.imageUrl));
+        }
+    });
 }
 
 
@@ -1061,6 +1170,10 @@ async function placeObjects(floorTiles, objectCounts) {
                 const monster = new Monster(randomMonster.type, x, y, tileSize, randomMonster.imageUrl, randomMonster.maxHp, randomMonster.atk, randomMonster.def, randomMonster.spd, randomMonster.coin);
                 mapTiles[y][x].monster = monster;
                 objectPromises.push(...await monster.initMonster());
+            } else if (objectType === 'RelicChest') { // RelicChest 설정 부분
+                    const chest = new RelicChest(x, y, tileSize, getObjectImageUrl('RelicChest'));
+                    mapTiles[y][x].relicChest = chest; // 타일에 relicChest 속성으로 설정
+                    objectPromises.push(chest.initChest());
             } else {
                 const object = new ObjectTile(objectType, x, y, tileSize, getObjectImageUrl(objectType));
                 objectPromises.push(object.initObject());
@@ -1096,17 +1209,27 @@ function getRandomTileImage(tileType, region) {
     return tileImageOptions[Math.floor(Math.random() * tileImageOptions.length)]; // 랜덤으로 이미지 선택
 }
 
-// 게임 맵을 순서대로 생성하는 함수
+
+
+
+
+
+
+// 게임 맵을 생성하는 함수
 async function generateMap(region) {
     if (floor > 5) {
         monsterLevel = 'level2';
     }
 
+    const inventoryImages = inventorySlots
+    .map(slot => slot.relicImage)
+    .filter(img => img); // null 또는 undefined 값 제외
+
     const descriptionBackground = canvas.getObjects().find(obj => obj.id === 'descriptionBoxBackground');
     const descriptionText = canvas.getObjects().find(obj => obj.id === 'descriptionBoxText');
     const switchButtonBackground = canvas.getObjects().find(obj => obj.id === 'switchButtonBackground');
     const switchButtonText = canvas.getObjects().find(obj => obj.id === 'switchButtonText');
-    clearCanvas([descriptionBackground, descriptionText, switchButtonBackground, switchButtonText]); // 설명창 요소 제외하고 캔버스를 초기화하여 기존 타일을 모두 제거
+    clearCanvas([descriptionBackground, descriptionText, switchButtonBackground, switchButtonText, ...inventorySlots, ...inventoryImages]); // 설명창 요소 제외하고 캔버스를 초기화하여 기존 타일을 모두 제거
 
     canvasObjects = [];
     let playerStartPosition = null;
@@ -1141,9 +1264,6 @@ async function generateMap(region) {
     const loadedTiles = await Promise.all(tilePromises);
     addImagesToCanvasInOrder(loadedTiles);
 
-    // 설명창 배경과 텍스트가 제거되지 않고 유지되도록 보장
-    //initializeGameUI();
-
     // 플레이어 시작 위치 설정 및 캔버스에 추가
     if (playerStartPosition) {
         player.x = playerStartPosition.x;
@@ -1167,35 +1287,6 @@ async function generateMap(region) {
 
 // 현재 상태를 저장하는 변수 ('main'은 메인 화면, 'game'은 게임 화면)
 let currentScreen = 'main';
-
-/*
-// 메뉴 화면을 생성하는 함수
-function generateMainMenu() {
-    // 캔버스 초기화
-    canvas.clear();
-
-    // 이미지 배열을 순회하며 캔버스에 이미지 추가
-    menuImages.forEach(function(imageConfig) {
-        fabric.Image.fromURL(imageConfig.src, function(img) {
-            img.set({
-                left: imageConfig.left,
-                top: imageConfig.top,
-                selectable: false,
-                hoverCursor: 'default'
-            });
-
-            // 클릭 이벤트가 있으면 설정
-            if (imageConfig.onClick) {
-                img.on('mousedown', imageConfig.onClick);
-            }
-
-            // 캔버스에 이미지 추가
-            canvas.add(img);
-        });
-        
-    });
-    
-}*/
 
 // 화면 전환 함수
 async function switchScreen() {
