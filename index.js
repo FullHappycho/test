@@ -16,6 +16,28 @@ let currentDescriptionWindow = 'A'; // 현재 표시할 창 ('A' 또는 'B')
 let descriptionHistoryA = []; // 창 A의 기록 배열
 let descriptionHistoryB = ''; // 창 B의 단일 설명 내용
 let descriptionImageB = null; // 설명창 B의 이미지 독립 관리
+let currentBDisplayedMonster = null; // 설명창 B에 표시된 몬스터를 추적
+
+// 게임 음악 객체 생성;
+const gameMusic = new Audio('./music/evening_sky-196011.mp3');
+const gameOverMusic = new Audio('./music/game-over-arcade-6435.mp3');
+const endingMusic = new Audio('./music/90s-game-ui-7-185100.mp3');
+
+// 음악 반복 재생 설정
+gameOverMusic.loop = false;
+endingMusic.loop = false;
+gameMusic.loop = true;
+
+// 게임 음악 재생 함수
+function playGameMusic() {
+    gameMusic.currentTime = 0; // 음악 시작 위치를 처음으로 돌림
+    gameMusic.play(); // 게임 음악 재생
+}
+
+function stopBackgroundMusic() {
+    gameMusic.pause();
+    gameMusic.currentTime = 0;
+}
 
 // 렌더링 순서 목록 배열 
 const canvasOrder = {
@@ -60,13 +82,8 @@ function updateCanvasOrder() {
 }
 
 function clearCanvas(excludeObjects = []) {
-    // 매개변수로 단일 객체가 전달된 경우 배열로 변환
-    if (!Array.isArray(excludeObjects)) {
-        excludeObjects = [excludeObjects];
-    }
-
-    // 제외할 객체의 ID 목록을 생성
-    const excludeIds = excludeObjects.map(obj => obj.id);
+    // 제외할 객체의 ID 목록 생성
+    const excludeIds = excludeObjects.map(obj => obj?.id).filter(id => id); // undefined 값 제거
 
     // 제외할 객체를 제외한 모든 객체를 캔버스에서 제거
     canvas.getObjects().forEach((obj) => {
@@ -118,6 +135,9 @@ function displayFloor() {
 }
 
 function displayGameOver() {
+    stopBackgroundMusic(); // 기존 배경 음악 정지
+    gameOverMusic.play();
+
     // 게임 오버 배경 생성
     const gameOverBackground = new fabric.Rect({
         left: 0,
@@ -144,6 +164,114 @@ function displayGameOver() {
     });
     canvas.add(gameOverText);
 
+    // 리스타트 버튼 추가
+    const restartButton = new fabric.Text("다시 시작", {
+        left: canvas.width / 2,
+        top: canvas.height / 2 + 40,
+        fontSize: 24,
+        fill: 'white',
+        fontFamily: 'KoreanFont',
+        selectable: false,
+        hoverCursor: 'pointer',
+        originX: 'center',
+        originY: 'center'
+    });
+
+    restartButton.on('mousedown', restartGame); // 리스타트 기능 연결
+    canvas.add(restartButton);
+
+    canvas.renderAll();
+}
+
+// 리스타트 기능 구현 (게임 상태 초기화)
+function restartGame() {
+    // 음악 초기화 및 배경 음악 재생
+    gameOverMusic.pause();
+    endingMusic.pause();
+    gameOverMusic.currentTime = 0;
+    endingMusic.currentTime = 0;
+    playGameMusic(); // 게임 음악 재생
+
+    // 플레이어 상태 및 게임 설정 초기화
+    player.maxhp = 20;
+    player.hp = player.maxhp;
+    player.maxhpMultiplier = 1.0;
+    player.atk = 1;
+    player.atkMultiplier = 1.0;
+    player.def = 0;
+    player.defMultiplier = 1.0;
+    player.spd = 1;
+    player.spdMultiplier = 1.0;
+    player.coin = 0;
+    player.coinMultiplier = 1.0;
+    floor = 1;
+    monsterLevel = 'level1';
+    objectCounts.Monster = 5;
+
+    // 캔버스 초기화 (인벤토리 창 관련 객체 제외)
+    const inventoryImages = inventorySlots.map(slot => slot.relicImage).filter(img => img); // null 값 제외
+    const descriptionBackground = canvas.getObjects().find(obj => obj.id === 'descriptionBoxBackground');
+    const descriptionText = canvas.getObjects().find(obj => obj.id === 'descriptionBoxText');
+    const switchButtonBackground = canvas.getObjects().find(obj => obj.id === 'switchButtonBackground');
+    const switchButtonText = canvas.getObjects().find(obj => obj.id === 'switchButtonText');
+
+    // 캔버스를 초기화하고 새로운 맵을 생성
+    clearCanvas([descriptionBackground, descriptionText, switchButtonBackground, switchButtonText, ...inventorySlots, ...inventoryImages]);
+    generateMap(region);
+    displayPlayerStats();
+
+    // 플레이어 움직임 활성화
+    enablePlayerMovement();
+}
+
+// 엔딩 화면 구현
+function displayEnding() {
+    stopBackgroundMusic(); // 기존 배경 음악 정지
+    endingMusic.play(); // 클리어 음악 재생
+    
+    const endingBackground = new fabric.Rect({
+        left: 0,
+        top: 0,
+        width: canvas.width,
+        height: canvas.height,
+        fill: 'white',
+        selectable: false,
+        hoverCursor: 'default'
+    });
+    canvas.add(endingBackground);
+
+    const endingText = new fabric.Text('게임 클리어!', {
+        left: canvas.width / 2,
+        top: canvas.height / 2 - 20,
+        fontSize: 48,
+        fill: 'black',
+        fontFamily: 'KoreanFont',
+        selectable: false,
+        hoverCursor: 'default',
+        originX: 'center',
+        originY: 'center'
+    });
+    canvas.add(endingText);
+
+    // 다시 플레이 버튼 추가
+    const restartButton = new fabric.Text("다시 플레이", {
+        left: canvas.width / 2,
+        top: canvas.height / 2 + 40,
+        fontSize: 24,
+        fill: 'black',
+        fontFamily: 'KoreanFont',
+        selectable: false,
+        hoverCursor: 'pointer',
+        originX: 'center',
+        originY: 'center'
+    });
+
+    restartButton.on('mousedown', restartGame); // 리스타트 기능 연결
+    canvas.add(restartButton);
+
+    // 플레이어 움직임 비활성화
+    disablePlayerMovement();
+
     canvas.renderAll();
 }
 
@@ -158,6 +286,41 @@ function addDescriptionToA(text) {
     if (currentDescriptionWindow === 'A') {
         displayDescription();
     }
+}
+
+// 설명창 B의 몬스터 정보를 업데이트하는 함수
+function updateDescriptionWindowB(monster) {
+    // 몬스터 객체가 유효한지 확인
+    if (monster && currentDescriptionWindow === 'B' && currentBDisplayedMonster === monster) {
+        // 스탯 정보 텍스트 구성 (몬스터 속성을 직접 참조)
+        const descriptionText = `${monster.type} - 몬스터 정보:\nHP: ${monster.hp || 0}/${monster.maxHp || 0}\nATK: ${monster.atk || 0}\nDEF: ${monster.def || 0}\nSPD: ${monster.spd || 0}\nCoins: ${monster.coin || 0}`;
+
+        // 기존 텍스트 객체를 제거하고 새로 추가하여 업데이트
+        if (canvasOrder.descriptionText) {
+            canvas.remove(canvasOrder.descriptionText);
+        }
+        const descriptionTextObject = new fabric.Text(descriptionText, {
+            left: 100,
+            top: 485,
+            fontSize: 18,
+            fill: 'black',
+            fontFamily: 'KoreanFont',
+            selectable: false,
+            hoverCursor: 'default',
+            id: 'descriptionBoxText'
+        });
+        canvas.add(descriptionTextObject);
+        canvasOrder.descriptionText = descriptionTextObject;
+
+        updateCanvasOrder();
+        canvas.renderAll();
+    }
+}
+
+// 몬스터 클릭 시 설명창 B에 표시할 몬스터로 설정
+function onMonsterClick(monster) {
+    currentBDisplayedMonster = monster;
+    updateDescriptionWindowB(monster); // 처음 클릭 시에도 정보 표시
 }
 
 function displayDescription(text = '', imageUrl = null) {
@@ -306,6 +469,13 @@ function addClickEventToObjects(object, description, imageUrl) {
         }
     });
 }
+/*
+function addClickEventToObjects(object, description, imageUrl) {
+    object.on('mousedown', () => {
+        currentBDisplayedMonster = object; // 클릭한 몬스터 설정
+        updateDescriptionWindowB(object); // 설명창 B에 정보 표시
+    });
+}*/
 
 // 이미지 정보를 담은 배열 생성
 const menuImages = [
@@ -323,13 +493,15 @@ const menuImages = [
     },
     {
         src: './images/Button_GameStart.png',
-        left: 25,     // 버튼 x 좌표 (예: 200px 너비 이미지)
-        top: 400,                         // 버튼 y 좌표
+        left: 20,     // 버튼 x 좌표 (예: 200px 너비 이미지)
+        top: 500,                         // 버튼 y 좌표
         onClick: function() {             // 클릭 시 이벤트
             currentScreen = 'game';
             generateMap(region);          // 게임 시작
+            playGameMusic(); // 게임 음악 재생
         }
-    },
+    }
+    /*
     {
         src: './images/Button_GameSetting.png',
         left: 25,     // 버튼 x 좌표 (예: 200px 너비 이미지)
@@ -337,6 +509,7 @@ const menuImages = [
         onClick: function() {             
         }
     }
+    */
     // 다른 이미지나 버튼 추가 가능
 ];
 
@@ -592,15 +765,22 @@ class Monster {
             fill: 'red'
         });
 
+        // 설명창 B 업데이트를 위한 클릭 이벤트 연결
+        this.monsterObject.on('mousedown', () => onMonsterClick(this));
+
         // 설명 텍스트 
-        const description = `${this.type} - HP: ${this.hp}/${this.maxHp}, ATK: ${this.atk}, DEF: ${this.def}, SPD: ${this.spd}, 보유 코인: ${this.coin}`;
+        const description = `${this.type} - MAX_HP: ${this.maxHp}, ATK: ${this.atk}, DEF: ${this.def}, SPD: ${this.spd}, 보유 코인: ${this.coin}`;
         addClickEventToObjects(this.monsterObject, description, this.imageUrl);
 
         return [img, this.healthBar];
     }
 
+    // 현재 몬스터 상태를 반환하는 함수 추가
+    getCurrentStats() {
+        return `HP: ${this.hp}/${this.maxHp}\nATK: ${this.atk}\nDEF: ${this.def}\nSPD: ${this.spd}\nCoins: ${this.coin}`;
+    }
+
     // 체력 업데이트 메서드
-    // 체력 업데이트 시 canvas.add 직접 호출
     updateHealth(newHp) {
         this.hp = newHp;
         const newWidth = (this.hp / this.maxHp) * 50;
@@ -608,6 +788,7 @@ class Monster {
         this.healthBar.left = this.monsterObject.left + (this.tileSize - newWidth) / 2;
         canvas.renderAll();
     }
+    
 }
 
 function engageCombat(player, monster, tile) {
@@ -663,6 +844,11 @@ function playerAttack(player, monster) {
     const damage = Math.max(1, player.atk - monster.def);
     monster.hp -= damage;
     addDescriptionToA(`공격으로 ${monster.type}에게 ${damage} 피해를 가했습니다.`);
+
+    /*
+    // 설명창 B에 표시된 몬스터일 경우 스탯 업데이트
+    updateDescriptionWindowB(monster);
+    */
 }
 
 function monsterAttack(player, monster) {
@@ -742,11 +928,17 @@ class Player {
         this.playerObject = null; // fabric.Image 객체
 
         this.maxhp = 20;
+        this.maxhpMultiplier = 1.0;
         this.hp = 20;
         this.atk = 1;
+        this.atkMultiplier = 1.0;
         this.def = 0;
+        this.defMultiplier = 1.0;
         this.spd = 1;
+        this.spdMultiplier = 1.0;
         this.coin = 0;
+        this.coinMultiplier = 1.0;
+        
     }
 
     // 플레이어 초기화 함수
@@ -927,11 +1119,141 @@ function handlePlayerMove(event) {
 document.addEventListener('keydown', handlePlayerMove);
 
 const relics = [
-    { name: 'Cursed Sword', grade: '저주', description: '보유시, 공격력 1 증가', effect: () => { player.atk += 1;}, imageUrl: './images/CursedSword.png' },
-    { name: '도끼', grade: '일반', description: '도끼 - 일반\n보유시, 공격력 2 증가', effect: () => { player.atk += 2;}, imageUrl: './images/CursedSword.png' },
-    { name: 'Healing Herb', grade: '일반', description: '체력을 5 회복합니다', effect: () => { player.hp = Math.min(player.hp + 5, player.maxhp); }, imageUrl: './images/HealingHerb.png' },
-    { name: 'Magic Amulet', grade: '희귀', description: '속도 증가', effect: () => { player.spd += 1; }, imageUrl: './images/MagicAmulet.png' },
-    { name: 'Legendary Armor', grade: 'Legendary', description: '방어력 크게 증가', effect: () => { player.def += 5; }, imageUrl: './images/LegendaryArmor.png' }
+    {
+        name: '예리한 검',
+        grade: '희귀',
+        description: '예리한 검 - 희귀\n공격력 4 증가', 
+        effect: () => { player.atk += 4;}, 
+        imageUrl: './images/sword.png'
+    },
+    { 
+        name: '도끼', 
+        grade: '일반', 
+        description: '도끼 - 일반\n공격력 2 증가', 
+        effect: () => { player.atk += 2;}, 
+        imageUrl: './images/Axe.png' 
+    },
+    { 
+        name: '회복 물약', 
+        grade: '일반', 
+        description: '회복 물약 - 일반\n얻는 즉시, 체력을 20 회복합니다', 
+        effect: () => { player.hp = Math.min(player.hp + 20, player.maxhp); }, 
+        imageUrl: './images/potion2.png' 
+    },
+    { 
+        name: '마법 목걸이', 
+        grade: '일반', 
+        description: '마법 목걸이 - 일반\n속도 1 증가', 
+        effect: () => { player.spd += 1; }, 
+        imageUrl: './images/necklace.png' 
+    },
+    { 
+        name: '튼튼한 갑옷', 
+        grade: '희귀', 
+        description: '튼튼한 갑옷 - 희귀\n방어력 3 증가', 
+        effect: () => { player.def += 3; }, 
+        imageUrl: './images/armor.png' 
+    },
+    { 
+        name: '악마의 피리', 
+        grade: '저주', 
+        description: '악마의 피리 - 저주\n방어력 1, 속도 1 증가\n앞으로 나오는 맵의 몬스터 수 2 증가', 
+        effect: () => { player.def += 1; player.spd += 1; objectCounts.Monster += 2}, 
+        imageUrl: './images/flute.png' 
+    },
+    { 
+        name: '반짝이는 반지', 
+        grade: '희귀', 
+        description: '반짝이는 반지 - 희귀\n공격력 1, 방어력 1 증가', 
+        effect: () => { player.atk += 1; player.def += 1; }, 
+        imageUrl: './images/ring.png' 
+    },
+    { 
+        name: '가벼운 물약', 
+        grade: '희귀', 
+        description: '속도 물약 - 희귀\n속도 3 증가', 
+        effect: () => { player.spd += 3; }, 
+        imageUrl: './images/potion3.png' 
+    },
+    { 
+        name: '무거운 물약', 
+        grade: '일반', 
+        description: '무거운 물약 - 일반\n방어력 1 증가', 
+        effect: () => { player.def += 1; }, 
+        imageUrl: './images/potion1.png' 
+    },
+    { 
+        name: '거대한 팔찌', 
+        grade: '희귀', 
+        description: '거대한 팔찌 - 희귀\n최대 체력 10 증가', 
+        effect: () => { player.maxhp += 10; }, 
+        imageUrl: './images/hand.png' 
+    },
+    { 
+        name: '사탕', 
+        grade: '일반', 
+        description: '사탕 - 일반\n최대 체력 5 증가, 그리고 체력을 5 회복', 
+        effect: () => { player.maxhp += 5; player.hp = Math.min(player.hp + 5, player.maxhp)}, 
+        imageUrl: './images/candy.png' 
+    },
+    { 
+        name: '신비한 물약', 
+        grade: '전설', 
+        description: '신비한 물약 - 전설\n최대 체력 20 증가, 그리고 체력을 20 회복', 
+        effect: () => { player.maxhp += 20; player.hp = Math.min(player.hp + 20, player.maxhp)}, 
+        imageUrl: './images/big_potion.png' 
+    },
+    { 
+        name: '기사 투구', 
+        grade: '전설', 
+        description: '기사 투구 - 전설\n얻는 즉시, 현재 속도 만큼 방어력 증가', 
+        effect: () => { player.def += player.spd;}, 
+        imageUrl: './images/helmet.png' 
+    },
+    /*
+    { 
+        name: '파괴 지시자의 지휘봉', 
+        grade: '희귀', 
+        description: '몬스터에게 가하는 유물 피해가 25% 추가', 
+        imageUrl: './images/DestructionWand.png',
+        effect: () => { player.additionalRelicDamage = 1.25; }
+    },
+    { 
+        name: '종말의 선언문', 
+        grade: '전설', 
+        description: '40턴마다 모든 몬스터 즉사', 
+        imageUrl: './images/ApocalypseScroll.png',
+        effect: () => { player.doomCounter = 40; }
+    },
+    { 
+        name: '공기 가방', 
+        grade: '일반', 
+        description: '인벤토리 빈 칸 1개당 방어력 1 증가', 
+        imageUrl: './images/AirBag.png',
+        effect: () => { player.def = player.baseDef + inventorySlots.filter(slot => !slot.hasRelic).length; }
+    },
+    { 
+        name: '레몬맛 사탕', 
+        grade: '일반', 
+        description: '몬스터에게서 얻는 돈 20% 증가', 
+        imageUrl: './images/LemonCandy.png',
+        effect: () => { player.coinMultiplier = 1.2; }
+    },
+    { 
+        name: '고대왕의 검', 
+        grade: '전설', 
+        description: '공격 시 25% 확률로 추가 피해 2', 
+        imageUrl: './images/AncientKingsSword.png',
+        effect: () => { player.hasAncientSword = true; }
+    },
+    { 
+        name: '절규의 반지', 
+        grade: '희귀', 
+        description: '유물을 버릴 때마다 모든 적에게 3 피해', 
+        imageUrl: './images/ScreamRing.png',
+        effect: () => { player.hasScreamRing = true; }
+    }
+    */
 ];
 
 const inventorySlots = []; // 전역 선언
@@ -1101,12 +1423,10 @@ function addRelicToInventory(relic) {
     });
 }
 
-
-
 //배치할 오브젝트 수를 설정
 const objectCounts = {
     'Monster': 5,
-    'Shop': 1,
+    'Shop': 0,
     'RelicChest': 2,
     'Bonfire': 1
 };
@@ -1209,16 +1529,15 @@ function getRandomTileImage(tileType, region) {
     return tileImageOptions[Math.floor(Math.random() * tileImageOptions.length)]; // 랜덤으로 이미지 선택
 }
 
-
-
-
-
-
-
 // 게임 맵을 생성하는 함수
 async function generateMap(region) {
-    if (floor > 5) {
+    if (floor > 10) {
         monsterLevel = 'level2';
+    }
+
+    if (floor > 50) {
+        displayEnding(); // 엔딩 화면 표시
+        return;
     }
 
     const inventoryImages = inventorySlots
@@ -1298,8 +1617,9 @@ async function switchScreen() {
 }
 
 // 처음에는 메인 화면을 보여줌
-initializeGameUI();
-switchScreen();
 
-// 렌더링 간격 설정 (60fps)
-//const renderInterval = 60;
+// 메인 화면 로딩 시 메인 메뉴 음악 재생
+window.addEventListener('DOMContentLoaded', () => {
+    initializeGameUI();
+    switchScreen();
+});
