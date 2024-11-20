@@ -18,25 +18,59 @@ let descriptionHistoryB = ''; // 창 B의 단일 설명 내용
 let descriptionImageB = null; // 설명창 B의 이미지 독립 관리
 let currentBDisplayedMonster = null; // 설명창 B에 표시된 몬스터를 추적
 
-// 게임 음악 객체 생성;
-const gameMusic = new Audio('./music/evening_sky-196011.mp3');
-const gameOverMusic = new Audio('./music/game-over-arcade-6435.mp3');
-const endingMusic = new Audio('./music/90s-game-ui-7-185100.mp3');
+// 음악 객체를 딕셔너리로 관리
+const audioManager = {
+    gameMusic: new Audio('./music/evening_sky-196011.mp3'),
+    gameOverMusic: new Audio('./music/game-over-arcade-6435.mp3'),
+    endingMusic: new Audio('./music/90s-game-ui-7-185100.mp3'),
+    bonfire: new Audio('./music/effect/bonfire.mp3'),
+    playerMove: new Audio('./music/effect/move.mp3'),
+    select: new Audio('./music/effect/select.mp3'),
+    hit: new Audio('./music/effect/hit.mp3'),
+    monsterDeath: new Audio('./music/effect/monsterDeath.mp3'),
+    chestOpen: new Audio('./music/effect/chestOpen.mp3'),
+    pickup: new Audio('./music/effect/pickup.mp3')
+};
 
-// 음악 반복 재생 설정
-gameOverMusic.loop = false;
-endingMusic.loop = false;
-gameMusic.loop = true;
-
-// 게임 음악 재생 함수
-function playGameMusic() {
-    gameMusic.currentTime = 0; // 음악 시작 위치를 처음으로 돌림
-    gameMusic.play(); // 게임 음악 재생
+// 반복 설정 초기화
+for (let key in audioManager) {
+    audioManager[key].loop = key === 'gameMusic'; // gameMusic만 반복 재생
 }
 
-function stopBackgroundMusic() {
-    gameMusic.pause();
-    gameMusic.currentTime = 0;
+// 음악 관리 함수
+function controlAudio(action, key, options = {}) {
+    const audio = audioManager[key];
+    if (!audio) {
+        console.warn(`Audio "${key}" not found.`);
+        return;
+    }
+
+    switch (action) {
+        case 'play':
+            audio.currentTime = options.startTime || 0;
+            audio.volume = options.volume !== undefined ? options.volume : 1.0;
+            audio.play();
+            break;
+
+        case 'pause':
+            audio.pause();
+            if (options.reset) {
+                audio.currentTime = 0; // 정지 후 시작 위치 초기화
+            }
+            break;
+
+        case 'stop':
+            audio.pause();
+            audio.currentTime = 0; // 정지 후 시작 위치 초기화
+            break;
+
+        case 'setVolume':
+            audio.volume = options.volume !== undefined ? options.volume : audio.volume;
+            break;
+
+        default:
+            console.warn(`Invalid action "${action}".`);
+    }
 }
 
 // 렌더링 순서 목록 배열 
@@ -80,19 +114,6 @@ function updateCanvasOrder() {
 
     canvas.renderAll(); // 캔버스 렌더링
 }
-/*
-function clearCanvas(excludeObjects = []) {
-    // 제외할 객체의 ID 목록 생성
-    const excludeIds = excludeObjects.map(obj => obj?.id).filter(id => id); // undefined 값 제거
-
-    // 제외할 객체를 제외한 모든 객체를 캔버스에서 제거
-    canvas.getObjects().forEach((obj) => {
-        if (!excludeIds.includes(obj.id)) {
-            canvas.remove(obj);
-        }
-    });
-    canvas.renderAll();
-}*/
 
 function clearCanvas(excludeObjects = []) {
     if (!Array.isArray(excludeObjects)) {
@@ -150,8 +171,8 @@ function displayFloor() {
 }
 
 function displayGameOver() {
-    stopBackgroundMusic(); // 기존 배경 음악 정지
-    gameOverMusic.play();
+    controlAudio('stop', 'gameMusic');// 기존 배경 음악 정지
+    controlAudio('play', 'gameOverMusic');
 
     // 게임 오버 배경 생성
     const gameOverBackground = new fabric.Rect({
@@ -201,11 +222,9 @@ function displayGameOver() {
 // 리스타트 기능 구현 (게임 상태 초기화)
 function restartGame() {
     // 음악 초기화 및 배경 음악 재생
-    gameOverMusic.pause();
-    endingMusic.pause();
-    gameOverMusic.currentTime = 0;
-    endingMusic.currentTime = 0;
-    playGameMusic(); // 게임 음악 재생
+    controlAudio('stop', 'endingMusic');
+    controlAudio('stop', 'gameOverMusic');
+    controlAudio('play', 'gameMusic'); // 게임 음악 재생
 
     // 플레이어 상태 및 게임 설정 초기화
     player.maxhp = 20;
@@ -243,8 +262,8 @@ function restartGame() {
 
 // 엔딩 화면 구현
 function displayEnding() {
-    stopBackgroundMusic(); // 기존 배경 음악 정지
-    endingMusic.play(); // 클리어 음악 재생
+    controlAudio('stop', 'gameMusic'); // 기존 배경 음악 정지
+    controlAudio('play', 'endingMusic'); // 클리어 음악 재생
     
     const endingBackground = new fabric.Rect({
         left: 0,
@@ -462,6 +481,7 @@ function addSwitchButton() {
     });
 
     const toggleDescriptionWindow = () => {
+        controlAudio('play', 'select');
         currentDescriptionWindow = (currentDescriptionWindow === 'A') ? 'B' : 'A';
         displayDescription();
     };
@@ -482,17 +502,11 @@ function addSwitchButton() {
 function addClickEventToObjects(object, description, imageUrl) {
     object.on('mousedown', () => {
         if (currentDescriptionWindow === 'B') {
+            controlAudio('play', 'select');
             displayDescription(description, imageUrl);
         }
     });
 }
-/*
-function addClickEventToObjects(object, description, imageUrl) {
-    object.on('mousedown', () => {
-        currentBDisplayedMonster = object; // 클릭한 몬스터 설정
-        updateDescriptionWindowB(object); // 설명창 B에 정보 표시
-    });
-}*/
 
 // 이미지 정보를 담은 배열 생성
 const menuImages = [
@@ -515,7 +529,7 @@ const menuImages = [
         onClick: function() {             // 클릭 시 이벤트
             currentScreen = 'game';
             generateMap(region);          // 게임 시작
-            playGameMusic(); // 게임 음악 재생
+            controlAudio('play', 'gameMusic'); // 게임 음악 재생
         }
     }
     /*
@@ -809,6 +823,7 @@ class Monster {
 }
 
 function engageCombat(player, monster, tile) {
+    controlAudio('play', 'hit');
     // 공격 순서 결정: 속도에 따라 순서 설정
     if (player.spd > monster.spd) {
         playerAttack(player, monster); // 플레이어가 먼저 공격
@@ -840,6 +855,7 @@ function engageCombat(player, monster, tile) {
 
     // 전투 종료 후 몬스터가 죽으면 제거
     if (monster.hp <= 0) {
+        controlAudio('play', 'monsterDeath');
         // 플레이어가 몬스터의 코인을 획득
         player.coin += monster.coin;
         addDescriptionToA(`플레이어가 ${monster.type}를 처치하고 ${monster.coin} 코인을 획득했습니다!`);
@@ -886,6 +902,7 @@ function healPlayer(amount) {
 }
 
 function healPlayerBonfire(amount) {
+    controlAudio('play', 'bonfire');
     player.hp = Math.min(player.maxhp, player.hp + Math.round(player.maxhp/2) + amount); // 최대 체력 이상으로 회복되지 않음
     displayPlayerStats(); // 체력 정보 갱신
 }
@@ -1049,6 +1066,7 @@ class Player {
                 else if (targetTile && targetTile.reachable) {
                     this.x = newX;
                     this.y = newY;
+                    controlAudio('play', 'playerMove');
                     this.updatePlayerPosition();
                     checkAdjacentMonsters(this, mapTiles); // 인접한 몬스터가 있으면 공격 받을 수 있음
 
@@ -1325,6 +1343,7 @@ class RelicChest {
 }
 
 function promptRelicDecision(relic) {
+    controlAudio('play', 'chestOpen');
     disablePlayerMovement();  // 플레이어 동작 비활성화
 
     const overlay = new fabric.Rect({
@@ -1349,7 +1368,7 @@ function promptRelicDecision(relic) {
         });
         canvas.add(img);
 
-        img.on('mousedown', () => displayDescription(relic.description, relic.imageUrl));
+        img.on('mousedown', () => {controlAudio('play', 'select'); displayDescription(relic.description, relic.imageUrl)});
     });
 
     const messageText = new fabric.Text("이 유물을 획득하시겠습니까?", {
@@ -1415,6 +1434,7 @@ function addRelicToInventory(relic) {
         return;
     }
 
+    controlAudio('play', 'pickup');
     addDescriptionToA(`유물 "${relic.name}" (${relic.grade})를 획득했습니다!`);
     relic.effect();
     displayPlayerStats();
