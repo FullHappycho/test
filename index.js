@@ -686,10 +686,30 @@ const predefinedMaps = {
             ['Floor', 'Floor', 'Floor', 'Floor', 'Floor', 'Floor', 'Floor'],
             ['Floor', 'Floor', 'Floor', 'Wall', 'Floor', 'Floor', 'Floor'],
             ['End', 'Floor', 'Floor', 'Wall', 'Wall', 'Wall', 'Wall']
+        ],
+        // 맵 10
+        [
+            ['River', 'River', 'River', 'River', 'River', 'River', 'River'],
+            ['River', 'River', 'Floor', 'Floor', 'Floor', 'River', 'River'],
+            ['River', 'Floor', 'Floor', 'Floor', 'River', 'River', 'River'],
+            ['River', 'Floor', 'Floor', 'Floor', 'Floor', 'Floor', 'River'],
+            ['River', 'Floor', 'Wall', 'Wall', 'Floor', 'Floor', 'River'],
+            ['River', 'Floor', 'End', 'Wall', 'Start', 'Floor', 'River'],
+            ['Wall', 'Wall', 'Wall', 'Wall', 'Wall', 'Wall', 'Wall']
+        ],
+        // 맵 11
+        [
+            ['River', 'Wall', 'Wall', 'Wall', 'Wall', 'Wall', 'Wall'],
+            ['River', 'River', 'River', 'Floor', 'Floor', 'Wall', 'Wall'],
+            ['River', 'River', 'Floor', 'Floor', 'Floor', 'Wall', 'Wall'],
+            ['River', 'Floor', 'Floor', 'Floor', 'Floor', 'Wall', 'Wall'],
+            ['River', 'Start', 'Floor', 'Floor', 'Floor', 'End', 'Wall'],
+            ['River', 'River', 'Floor', 'Floor', 'Floor', 'Floor', 'Wall'],
+            ['River', 'River', 'River', 'River', 'Floor', 'Floor', 'Wall']
         ]
     ],
     '동굴': [
-        // 맵 3
+        // 맵 1
         [
             ['End', 'Floor', 'Floor', 'Floor', 'River', 'Floor', 'Floor'],
             ['Floor', 'Floor', 'Floor', 'Floor', 'River', 'Floor', 'River'],
@@ -699,7 +719,7 @@ const predefinedMaps = {
             ['River', 'Floor', 'Floor', 'Floor', 'River', 'Floor', 'Start'],
             ['Floor', 'Floor', 'Floor', 'Floor', 'River', 'Floor', 'Floor']
         ],
-        // 맵 4
+        // 맵 2
         [
             ['Start', 'Wall', 'Wall', 'Wall', 'Wall', 'Wall', 'End'],
             ['Floor', 'Floor', 'Floor', 'Wall', 'Wall', 'Floor', 'Floor'],
@@ -752,6 +772,46 @@ const monsterData = {
             def: 1,
             spd: 1,
             coin: 20
+        }
+    ],
+    level3 : [
+        {
+            type: 'Hunter',
+            imageUrl: './images/Hunter.png',
+            maxHp: 25,
+            atk: 4,
+            def: 2,
+            spd: 4,
+            coin: 30
+        },
+        {
+            type: 'Golem',
+            imageUrl: './images/Golem.png',
+            maxHp: 40,
+            atk: 3,
+            def: 5,
+            spd: 1,
+            coin: 42
+        }
+    ],
+    level4 : [
+        {
+            type: 'Devil',
+            imageUrl: './images/Devil.png',
+            maxHp: 20,
+            atk: 5,
+            def: 0,
+            spd: 10,
+            coin: 55
+        },
+        {
+            type: 'Dragon',
+            imageUrl: './images/Dragon.png',
+            maxHp: 60,
+            atk: 10,
+            def: 3,
+            spd: 2,
+            coin: 83
         }
     ]
 };
@@ -1434,29 +1494,30 @@ function addRelicToInventory(relic) {
         return;
     }
 
+    const emptySlot = inventorySlots.find(slot => !slot.hasRelic);
+    if (!emptySlot) {
+        addDescriptionToA("인벤토리가 가득 차서 유물을 획득할 수 없습니다.");
+        return;
+    }
+
     controlAudio('play', 'pickup');
     addDescriptionToA(`유물 "${relic.name}" (${relic.grade})를 획득했습니다!`);
     relic.effect();
     displayPlayerStats();
 
     fabric.Image.fromURL(relic.imageUrl, (img) => {
-        const emptySlot = inventorySlots.find(slot => !slot.hasRelic);
-        if (emptySlot) {
-            img.set({
-                left: emptySlot.left + 2,
-                top: emptySlot.top + 2,
-                //scaleX: 0.9,
-                //scaleY: 0.9,
-                selectable: false,
-                hoverCursor: 'default'  // 커서가 변하지 않도록 설정
-            });
-            canvas.add(img);
-            emptySlot.hasRelic = true;
-            emptySlot.relic = relic;
-            emptySlot.relicImage = img;
+        img.set({
+            left: emptySlot.left + 2,
+            top: emptySlot.top + 2,
+            selectable: false,
+            hoverCursor: 'default',
+        });
+        canvas.add(img);
+        emptySlot.hasRelic = true;
+        emptySlot.relic = relic;
+        emptySlot.relicImage = img;
 
-            img.on('mousedown', () => displayDescription(relic.description, relic.imageUrl));
-        }
+        img.on('mousedown', () => displayDescription(relic.description, relic.imageUrl));
     });
 }
 
@@ -1568,11 +1629,19 @@ function getRandomTileImage(tileType, region) {
 
 // 게임 맵을 생성하는 함수
 async function generateMap(region) {
-    if (floor > 10) {
+    if (floor == 10) {
         monsterLevel = 'level2';
     }
 
-    if (floor > 50) {
+    if (floor == 25) {
+        monsterLevel = 'level3';
+    }
+
+    if (floor == 35) {
+        monsterLevel = 'level4';
+    }
+
+    if (floor == 50) {
         displayEnding(); // 엔딩 화면 표시
         return;
     }
